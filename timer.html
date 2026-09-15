@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>毫秒计时器</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: system-ui, sans-serif;
+        }
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background: #1a1a1a;
+            color: white;
+        }
+        .time-display {
+            font-size: 4rem;
+            font-family: "Consolas", monospace;
+            margin-bottom: 40px;
+        }
+        .btn-group {
+            display: flex;
+            gap: 16px;
+        }
+        button {
+            padding: 12px 28px;
+            font-size: 1.2rem;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+        }
+        #startBtn { background: #22c55e; color:white; }
+        #stopBtn { background: #ef4444; color:white; }
+    </style>
+</head>
+<body>
+    <div class="time-display" id="timeBox">00:00:00.000</div>
+    <div class="btn-group">
+        <button id="startBtn">开始</button>
+        <button id="stopBtn">停止</button>
+    </div>
+
+    <script>
+        const timeBox = document.getElementById('timeBox');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+
+        let startTime = 0;
+        let pausedTime = 0; // 累计暂停时长
+        let isRunning = false;
+        let timerId = null;
+
+        // 格式化：转 时:分:秒.毫秒
+        function formatMs(totalMs) {
+            const h = Math.floor(totalMs / 3600000);
+            const m = Math.floor((totalMs % 3600000) / 60000);
+            const s = Math.floor((totalMs % 60000) / 1000);
+            const ms = totalMs % 1000;
+            return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}.${ms.toString().padStart(3,'0')}`;
+        }
+
+        function update() {
+            const now = performance.now();
+            const diff = now - startTime + pausedTime;
+            timeBox.textContent = formatMs(Math.floor(diff));
+            timerId = requestAnimationFrame(update);
+        }
+
+        // 开始 / 暂停切换
+        startBtn.onclick = () => {
+            if (!isRunning) {
+                // 启动
+                startTime = performance.now();
+                isRunning = true;
+                startBtn.textContent = "暂停";
+                timerId = requestAnimationFrame(update);
+            } else {
+                // 暂停
+                cancelAnimationFrame(timerId);
+                pausedTime += (performance.now() - startTime);
+                isRunning = false;
+                startBtn.textContent = "继续";
+            }
+        }
+
+        // 停止，全部重置
+        stopBtn.onclick = () => {
+            cancelAnimationFrame(timerId);
+            startTime = 0;
+            pausedTime = 0;
+            isRunning = false;
+            startBtn.textContent = "开始";
+            timeBox.textContent = "00:00:00.000";
+        }
+    </script>
+</body>
+</html>
