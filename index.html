@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多活动计时器</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: system-ui, sans-serif;
+        }
+        body {
+            background-color: #121212;
+            color: #fff;
+            padding: 32px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        h2 {
+            margin-bottom: 24px;
+            text-align: center;
+        }
+        .activity-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 12px;
+            margin-bottom: 32px;
+        }
+        .activity-btn {
+            padding: 14px 8px;
+            font-size: 1rem;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            opacity: 0.75;
+            color: #fff;
+        }
+        .activity-btn.active {
+            opacity: 1;
+            outline: 3px solid #ffffff;
+            transform: scale(1.03);
+        }
+        .time-display {
+            font-family: Consolas, monospace;
+            font-size: 2rem;
+            margin-bottom: 12px;
+            text-align: center;
+        }
+        .progress-container {
+            width: 100%;
+            height: 36px;
+            background-color: #272727;
+            border-radius: 10px;
+            display: flex;
+            overflow: hidden;
+            margin-bottom: 16px;
+        }
+        .progress-segment {
+            height: 100%;
+            transition: width 0.3s ease;
+        }
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap:10px;
+            margin-bottom:20px;
+        }
+        .legend-item {
+            display:flex;
+            align-items:center;
+            gap:4px;
+            font-size:0.9rem;
+        }
+        .color-block {
+            width:14px;
+            height:14px;
+            border-radius:3px;
+        }
+    </style>
+</head>
+<body>
+    <h2>今日活动计时器</h2>
+    <div class="activity-buttons">
+        <button class="activity-btn" data-name="read">读书</button>
+        <button class="activity-btn" data-name="video">看剧</button>
+        <button class="activity-btn" data-name="walk">散步</button>
+        <button class="activity-btn" data-name="eat">吃饭</button>
+        <button class="activity-btn" data-name="house">内务</button>
+        <button class="activity-btn" data-name="idle">发呆</button>
+    </div>
+    <div class="time-display" id="timeBox">00:00:00</div>
+
+    <div class="progress-container" id="progressBar"></div>
+    <div class="legend" id="legendBox"></div>
+
+<script>
+    // 活动配置：名称、展示名、颜色（按钮和进度条共用这个颜色）
+    const activityConfig = [
+        {key:"read", label:"读书", color:"#3b82f6"},
+        {key:"video", label:"看剧", color:"#ef4444"},
+        {key:"walk", label:"散步", color:"#22c55e"},
+        {key:"eat", label:"吃饭", color:"#f97316"},
+        {key:"house", label:"内务", color:"#a855f7"},
+        {key:"idle", label:"发呆", color:"#eab308"},
+    ];
+
+    // 状态存储
+    const state = {};
+    activityConfig.forEach(item=>{
+        state[item.key] = {
+            totalMs: 0,
+            startTime: 0,
+            running: false
+        }
+    })
+    let currentActiveKey = null;
+    let rafId = null;
+
+    const timeBox = document.getElementById("timeBox");
+    const progressBar = document.getElementById("progressBar");
+    const legendBox = document.getElementById("legendBox");
+    const btnList = document.querySelectorAll(".activity-btn");
+
+    // 给按钮绑定对应颜色
+    activityConfig.forEach(cfg => {
+        const btn = document.querySelector(`[data-name="${cfg.key}"]`);
+        btn.style.backgroundColor = cfg.color;
+    });
+
+    // 格式化总毫秒数为 HH:MM:SS，只精确到秒
+    function formatSec(totalMs) {
+        const totalSec = Math.floor(totalMs / 1000);
+        const h = Math.floor(totalSec / 3600);
+        const m = Math.floor((totalSec % 3600) / 60);
+        const s = totalSec % 60;
+        return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+    }
+
+    // 更新进度条和图例
+    function renderProgress() {
+        let totalAll = 0;
+        activityConfig.forEach(item=>{
+            totalAll += state[item.key].totalMs;
+        })
+        progressBar.innerHTML = "";
+        legendBox.innerHTML = "";
+        activityConfig.forEach(item=>{
+            const ms = state[item.key].totalMs;
+            const percent = totalAll ===0 ? 0 : ms / totalAll *100;
+            // 进度段，复用活动颜色，和按钮保持一致
+            const seg = document.createElement("div");
+            seg.className = "progress-segment";
+            seg.style.width = percent + "%";
+            seg.style.backgroundColor = item.color;
+            progressBar.appendChild(seg);
+            // 图例
+            const legendItem = document.createElement("div");
+            legendItem.className = "legend-item";
+            legendItem.innerHTML = `<span class="color-block" style="background:${item.color}"></span>${item.label}:${formatSec(ms)}`;
+            legendBox.appendChild(legendItem);
+        })
+    }
+
+    // 动画循环
+    function updateLoop() {
+        if(!currentActiveKey) return;
+        const act = state[currentActiveKey];
+        const now = performance.now();
+        const delta = Math.floor(now - act.startTime);
+        act.totalMs += delta;
+        act.startTime = now;
+        timeBox.textContent = formatSec(act.totalMs);
+        renderProgress();
+        rafId = requestAnimationFrame(updateLoop);
+    }
+
+    // 按钮点击事件
+    btnList.forEach(btn=>{
+        btn.addEventListener("click", ()=>{
+            const key = btn.dataset.name;
+            const act = state[key];
+
+            // 如果点击别的活动：停止当前正在跑的
+            if(currentActiveKey !== key){
+                if(currentActiveKey){
+                    cancelAnimationFrame(rafId);
+                    state[currentActiveKey].running = false;
+                    document.querySelector(`[data-name="${currentActiveKey}"]`).classList.remove("active");
+                }
+                // 切换到新活动，开始计时
+                currentActiveKey = key;
+                act.running = true;
+                act.startTime = performance.now();
+                btn.classList.add("active");
+                rafId = requestAnimationFrame(updateLoop);
+            } else {
+                // 点击当前正在计时的活动：暂停 / 继续
+                if(act.running){
+                    // 暂停
+                    cancelAnimationFrame(rafId);
+                    act.running = false;
+                    btn.classList.remove("active");
+                }else{
+                    // 继续
+                    act.running = true;
+                    act.startTime = performance.now();
+                    btn.classList.add("active");
+                    rafId = requestAnimationFrame(updateLoop);
+                }
+            }
+            renderProgress();
+        })
+    })
+    renderProgress();
+</script>
+</body>
+</html>
